@@ -1,4 +1,4 @@
-# Git Curang — Manual GitHub Contribution Generator
+# pixel-commits — Manual GitHub Contribution Generator
 
 Bikin commit backdate manual / acak biar contribution graph hijau, pakai data tanggal + jam yang kamu atur sendiri.
 

@@ -1,0 +1,23 @@
+{
+  "name": "pixel-commits",
+  "version": "1.0.0",
+  "description": "Turn your GitHub contribution graph into pixel art. A simple tool to generate custom commit timestamps so your green squares form any pattern you want — from a specific date range, click to build up intensity levels, then export as ready-to-use commit data.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sydalfhi/pixel-commits.git"
+  },
+  "keywords": [],
+  "author": "SYAID ALFARISHI",
+  "license": "ISC",
+
+  "dependencies": {
+    "jsonfile": "^6.1.0",
+    "moment": "^2.30.1",
+    "simple-git": "^3.25.0"
+  }
+}

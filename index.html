@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Contribution Heatmap - Tailwind + jQuery</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <style>
+    .graph-scroll { overflow-x: auto; }
+    #graph { display: flex; gap: 3px; width: max-content; }
+    .week { display: flex; flex-direction: column; gap: 3px; }
+    .day {
+      width: 13px; height: 13px;
+      border-radius: 3px;
+      background: #ebedf0;
+      border: 1px solid rgba(27,31,35,.06);
+      cursor: pointer;
+    }
+    .day.empty { background: transparent; border: none; cursor: default; }
+    .day:not(.empty):hover { outline: 1px solid #1b1f23; outline-offset: -1px; }
+    .lvl-0 { background: #ebedf0; }
+    .lvl-1 { background: #9be9a8; }
+    .lvl-2 { background: #40c463; }
+    .lvl-3 { background: #30a14e; }
+    .lvl-4 { background: #216e39; }
+    #tooltip {
+      position: fixed; pointer-events: none; z-index: 50;
+      display: none; font-size: 12px;
+    }
+    #monthRow { display: flex; gap: 3px; width: max-content; }
+    .month-label { font-size: 11px; color: #6b7280; white-space: nowrap; overflow: hidden; }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen p-4 md:p-8">
+
+<div class="max-w-5xl mx-auto space-y-4">
+
+  <div class="bg-white rounded-2xl shadow p-6">
+    <h1 class="text-2xl font-bold text-gray-800">GitHub-style Contribution Heatmap</h1>
+    <p class="text-sm text-gray-500 mt-1">Klik kiri kotak untuk tambah timestamp <code>HH:MM</code>. <b>Klik kanan</b> untuk hapus data tanggal itu. Makin banyak klik makin hijau pekat.</p>
+
+    <div class="mt-4 flex flex-wrap items-end gap-3">
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Start date</label>
+        <input id="startDate" type="date" value="2022-01-01"
+          class="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">End date</label>
+        <input id="endDate" type="date" value="2022-12-31"
+          class="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+      </div>
+      <button id="btnGenerate"
+        class="bg-green-600 hover:bg-green-700 text-white text-sm font-semibold px-5 py-2.5 rounded-lg active:scale-95 transition">Generate</button>
+      <button id="btnRandom"
+        class="bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold px-5 py-2.5 rounded-lg active:scale-95 transition">🎲 Random</button>
+      <button id="btnClear"
+        class="bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm font-semibold px-4 py-2.5 rounded-lg transition">Reset</button>
+      <div class="ml-auto text-sm text-gray-600">
+        Total klik: <span id="statTotal" class="font-bold text-gray-900">0</span> •
+        Hari terisi: <span id="statDays" class="font-bold text-gray-900">0</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-2xl shadow p-6">
+    <div class="flex items-center gap-4 mb-3">
+      <div class="flex gap-2 text-xs text-gray-500 w-8 flex-col leading-none">
+        <span class="h-[13px]">Sun</span><span class="h-[13px]">Mon</span><span class="h-[13px]">Tue</span><span class="h-[13px]">Wed</span><span class="h-[13px]">Thu</span><span class="h-[13px]">Fri</span><span class="h-[13px]">Sat</span>
+      </div>
+      <div class="graph-scroll flex-1">
+        <div id="monthRow" class="mb-1"></div>
+        <div id="graph"></div>
+      </div>
+    </div>
+    <div class="flex items-center justify-end gap-1 text-xs text-gray-500 mt-2">
+      <span>Less</span>
+      <span class="day lvl-0 !cursor-default"></span>
+      <span class="day lvl-1 !cursor-default"></span>
+      <span class="day lvl-2 !cursor-default"></span>
+      <span class="day lvl-3 !cursor-default"></span>
+      <span class="day lvl-4 !cursor-default"></span>
+      <span>More</span>
+    </div>
+    <p id="hint" class="text-xs text-gray-400 mt-2">Pilih rentang tanggal lalu klik Generate. Hover kotak untuk lihat tanggal & jumlah klik.</p>
+  </div>
+
+  <div class="bg-white rounded-2xl shadow p-6">
+    <div class="flex flex-wrap items-center gap-2 mb-3">
+      <h2 class="font-bold text-gray-800">Export</h2>
+      <span class="text-xs text-gray-400">output <code>MANUAL_COMMIT_DATA</code></span>
+      <div class="ml-auto flex gap-2">
+        <button id="btnExport" class="bg-gray-900 hover:bg-black text-white text-sm font-semibold px-4 py-2 rounded-lg transition">Refresh Output</button>
+        <button id="btnCopy" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition">Copy to clipboard</button>
+        <button id="btnDownload" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition">Download .js</button>
+      </div>
+    </div>
+    <textarea id="output" readonly spellcheck="false"
+      class="w-full h-64 font-mono text-xs bg-gray-900 text-green-200 rounded-xl p-4 focus:outline-none"
+      placeholder="Klik Export / Generate dulu..."></textarea>
+    <p id="copyMsg" class="text-xs text-green-600 mt-2 hidden">Copied!</p>
+  </div>
+
+</div>
+
+<div id="tooltip" class="bg-gray-900 text-white px-2 py-1 rounded-md shadow"></div>
+
+<script>
+$(document).ready(function() {
+  // { "2025-07-08": ["09:00"], ... }
+  var commitData = {};
+
+  try {
+    var saved = localStorage.getItem('MANUAL_COMMIT_DATA');
+    if (saved) commitData = JSON.parse(saved) || {};
+  } catch(e) {}
+
+  function pad(n){ return (n < 10 ? '0' : '') + n; }
+  function nowHHMM(){
+    var d = new Date();
+    return pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+  function fmtDate(d){
+    return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
+  }
+  function level(count){
+    if (count <= 0) return 0;
+    if (count === 1) return 1;
+    if (count === 2) return 2;
+    if (count === 3) return 3;
+    return 4; // 4+ = paling pekat, klik tetap nambah tanpa batas
+  }
+  function randomHHMM(){
+    var h = 8 + Math.floor(Math.random() * 10); // 08-17
+    var m = Math.floor(Math.random() * 60);
+    return pad(h) + ':' + pad(m);
+  }
+  function save(){ try { localStorage.setItem('MANUAL_COMMIT_DATA', JSON.stringify(commitData)); } catch(e){} }
+  function updateStats(){
+    var total = 0, days = 0;
+    $.each(commitData, function(_, arr){ if(arr && arr.length){ days++; total += arr.length; } });
+    $('#statTotal').text(total);
+    $('#statDays').text(days);
+  }
+
+  function generateGraph(){
+    var sVal = $('#startDate').val(), eVal = $('#endDate').val();
+    if(!sVal || !eVal){ alert('Isi start date & end date dulu'); return; }
+    var start = new Date(sVal + 'T00:00:00'), end = new Date(eVal + 'T00:00:00');
+    if(start > end){ alert('Start date harus <= end date'); return; }
+
+    var $graph = $('#graph').empty();
+    var $monthRow = $('#monthRow').empty();
+
+    // bangun array minggu: tiap minggu = array 7 (Sun..Sat) berisi Date atau null
+    var weeks = [];
+    var cur = new Date(start);
+    var firstWeek = new Array(7).fill(null);
+    // padding kolom pertama jika start bukan Minggu
+    var startDay = start.getDay(); // 0=Sun
+    for(var i = startDay; i < 7 && cur <= end; i++){
+      firstWeek[i] = new Date(cur);
+      cur.setDate(cur.getDate() + 1);
+    }
+    weeks.push(firstWeek);
+    while(cur <= end){
+      var w = new Array(7).fill(null);
+      for(var j = 0; j < 7 && cur <= end; j++){
+        w[j] = new Date(cur);
+        cur.setDate(cur.getDate() + 1);
+      }
+      weeks.push(w);
+    }
+
+    var monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var lastMonth = -1;
+
+    $.each(weeks, function(wi, week){
+      var $col = $('<div class="week"></div>');
+      $.each(week, function(di, dateObj){
+        if(!dateObj){
+          $col.append('<div class="day empty"></div>');
+        } else {
+          var ds = fmtDate(dateObj);
+          var cnt = (commitData[ds] || []).length;
+          var $d = $('<div class="day lvl-' + level(cnt) + '" data-date="' + ds + '" data-count="' + cnt + '"></div>');
+          $col.append($d);
+        }
+      });
+      $graph.append($col);
+
+      // label bulan: tampil saat minggu mengandung tgl 1, atau bulan berubah
+      var label = '';
+      for(var k = 0; k < 7; k++){
+        if(week[k]){
+          var m = week[k].getMonth();
+          if(week[k].getDate() === 1 || m !== lastMonth){
+            // hanya labeli sekali per bulan agar tidak duplikat tiap minggu
+            if(m !== lastMonth){ label = monthNames[m]; lastMonth = m; }
+          }
+          break;
+        }
+      }
+      // lebar kolom = 13px + gap 3px ≈ 16px, samakan dengan .week
+      var $ml = $('<div class="month-label" style="width:13px"></div>').text(label);
+      $monthRow.append($ml);
+    });
+
+    // fix lebar month label row agar sejajar (flex gap sama dengan graph)
+    $monthRow.css('gap', '3px');
+
+    $('#hint').text(weeks.length + ' minggu • ' + sVal + ' s/d ' + eVal + ' • klik kiri = tambah jam, klik kanan = hapus tanggal itu.');
+    refreshOutput();
+  }
+
+  function refreshOutput(){
+    var keys = Object.keys(commitData).filter(function(k){ return commitData[k] && commitData[k].length; }).sort();
+    var out;
+    if(!keys.length){
+      out = 'const MANUAL_COMMIT_DATA = {};';
+    } else {
+      out = 'const MANUAL_COMMIT_DATA = {\n';
+      $.each(keys, function(idx, k){
+        out += '    "' + k + '": [\n';
+        $.each(commitData[k], function(j, t){
+          out += '        "' + t + '"' + (j < commitData[k].length - 1 ? ',' : '') + '\n';
+        });
+        out += '    ]' + (idx < keys.length - 1 ? ',' : '') + '\n';
+      });
+      out += '};';
+    }
+    $('#output').val(out);
+    updateStats();
+  }
+
+  // delegasi klik kotak
+  $('#graph').on('click', '.day:not(.empty)', function(){
+    var $el = $(this);
+    var date = $el.attr('data-date');
+    if(!commitData[date]) commitData[date] = [];
+    commitData[date].push(nowHHMM());
+    save();
+    var c = commitData[date].length;
+    $el.attr('data-count', c).removeClass('lvl-0 lvl-1 lvl-2 lvl-3 lvl-4').addClass('lvl-' + level(c));
+    refreshOutput();
+    // feedback kecil
+    $el.hide().fadeIn(120);
+    showTooltip($el, date, c);
+  });
+
+  // tooltip hover (delegasi)
+  var $tip = $('#tooltip');
+  function showTooltip($el, date, count){
+    var times = (commitData[date] || []).join(', ');
+    $tip.html('<b>' + date + '</b> • ' + count + ' klik' + (times ? '<br><span class="text-green-300">' + times + '</span>' : '') + '<br><span class="text-gray-300" style="font-size:11px">kiri: +1 • kanan: hapus</span>').show();
+    var off = $el.offset();
+    $tip.css({ top: (off.top - $tip.outerHeight() - 8) + 'px', left: (off.left - 10) + 'px' });
+  }
+  $('#graph').on('mouseenter', '.day:not(.empty)', function(){
+    var $el = $(this);
+    showTooltip($el, $el.attr('data-date'), ($el.attr('data-count')|0));
+  }).on('mouseleave', '.day', function(){ $tip.hide(); });
+
+  // klik kanan = hapus data tanggal itu (delegasi contextmenu)
+  $('#graph').on('contextmenu', '.day:not(.empty)', function(e){
+    e.preventDefault();
+    var $el = $(this);
+    var date = $el.attr('data-date');
+    if(!commitData[date] || !commitData[date].length) return false;
+    delete commitData[date];
+    save();
+    $el.attr('data-count', 0).removeClass('lvl-0 lvl-1 lvl-2 lvl-3 lvl-4').addClass('lvl-0');
+    refreshOutput();
+    showTooltip($el, date, 0);
+    return false;
+  });
+
+  $('#btnGenerate').click(generateGraph);
+  // 🎲 Random: isi range tampil, max 4/hari + ada bolong-bolong
+  $('#btnRandom').click(function(){
+    var $days = $('#graph .day:not(.empty)');
+    if(!$days.length){ alert('Generate dulu rentangnya'); return; }
+    // hapus data lama khusus tanggal yang tampil (biar random fresh)
+    $days.each(function(){ delete commitData[$(this).attr('data-date')]; });
+    $days.each(function(){
+      var $el = $(this);
+      var date = $el.attr('data-date');
+      // ~30% bolong (kosong), 70% isi 1-4 commit
+      if(Math.random() < 0.3) {
+        $el.attr('data-count', 0).removeClass('lvl-0 lvl-1 lvl-2 lvl-3 lvl-4').addClass('lvl-0');
+        return;
+      }
+      var n = 1 + Math.floor(Math.random() * 4); // 1-4
+      var arr = [];
+      for(var i = 0; i < n; i++) arr.push(randomHHMM());
+      arr.sort();
+      commitData[date] = arr;
+      $el.attr('data-count', n).removeClass('lvl-0 lvl-1 lvl-2 lvl-3 lvl-4').addClass('lvl-' + level(n));
+    });
+    save();
+    refreshOutput();
+  });
+  $('#btnClear').click(function(){
+    if(!confirm('Hapus semua data klik?')) return;
+    commitData = {}; save();
+    generateGraph();
+  });
+  $('#btnExport').click(refreshOutput);
+
+  $('#btnCopy').click(function(){
+    refreshOutput();
+    var $ta = $('#output');
+    $ta.select();
+    var done = function(){
+      $('#copyMsg').removeClass('hidden');
+      setTimeout(function(){ $('#copyMsg').addClass('hidden'); }, 1500);
+    };
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText($ta.val()).then(done, function(){
+        document.execCommand('copy'); done();
+      });
+    } else {
+      document.execCommand('copy'); done();
+    }
+  });
+
+  $('#btnDownload').click(function(){
+    refreshOutput();
+    var blob = new Blob([$('#output').val()], { type: 'text/javascript' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'manual-commit-data.js';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 100);
+  });
+
+  // init
+  generateGraph();
+});
+</script>
+
+</body>
+</html>
